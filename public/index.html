@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aline Schütz — Agendar consulta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="icon" href="assets/logo.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="blob blob-a" aria-hidden="true"></div>
+<div class="blob blob-b" aria-hidden="true"></div>
+
+<div class="page">
+
+  <header class="hero">
+    <img src="assets/logo.png" alt="Aline Schütz — Psicologia e Bem-estar" class="hero-logo" />
+    <h1 class="hero-title">Vamos marcar um horário<br>para conversar</h1>
+    <p class="hero-sub">Escolha um dia e horário disponível. Sua solicitação é confirmada em até 24h.</p>
+    <div class="hero-divider" aria-hidden="true"></div>
+  </header>
+
+  <main class="card" id="app">
+
+    <section class="step" id="step-data" data-active="true">
+      <h2 class="step-title"><span class="step-num">1</span> Escolha o dia</h2>
+      <input type="date" id="input-data" class="input-date" />
+      <div id="slots-status" class="slots-status" aria-live="polite"></div>
+      <div id="slots-grid" class="slots-grid"></div>
+    </section>
+
+    <section class="step" id="step-form" data-active="false">
+      <h2 class="step-title"><span class="step-num">2</span> Seus dados</h2>
+      <p class="selected-summary" id="selected-summary"></p>
+
+      <label class="field">
+        <span>Nome completo</span>
+        <input type="text" id="input-nome" required />
+      </label>
+
+      <label class="field">
+        <span>Telefone (WhatsApp)</span>
+        <input type="tel" id="input-telefone" placeholder="(41) 9XXXX-XXXX" required />
+      </label>
+
+      <label class="field">
+        <span>E-mail <em>(opcional)</em></span>
+        <input type="email" id="input-email" />
+      </label>
+
+      <label class="field">
+        <span>Observações <em>(opcional)</em></span>
+        <textarea id="input-observacoes" rows="3"></textarea>
+      </label>
+
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="btn-voltar">Voltar</button>
+        <button type="button" class="btn-primary" id="btn-enviar">Solicitar horário</button>
+      </div>
+    </section>
+
+    <section class="step" id="step-sucesso" data-active="false">
+      <div class="success-icon-wrap">
+        <svg viewBox="0 0 60 60" width="60" height="60">
+          <circle cx="30" cy="30" r="27" fill="none" stroke="#EDE1FA" stroke-width="4" />
+          <circle id="success-ring" cx="30" cy="30" r="27" fill="none" stroke="#6C3FA6" stroke-width="4"
+                  stroke-linecap="round" stroke-dasharray="170" stroke-dashoffset="170"
+                  transform="rotate(-90 30 30)" />
+          <path id="success-check" d="M18 31 L26 39 L42 21" fill="none" stroke="#6C3FA6"
+                stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+                stroke-dasharray="40" stroke-dashoffset="40" />
+        </svg>
+      </div>
+      <h2 class="step-title" style="justify-content:center;">Solicitação enviada</h2>
+      <p id="sucesso-texto"></p>
+      <p class="success-note">Você receberá a confirmação por WhatsApp assim que o horário for aprovado.</p>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <p>Prefere falar diretamente? <a href="#" id="link-contato">Entrar em contato</a></p>
+  </footer>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

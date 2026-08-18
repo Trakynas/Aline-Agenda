@@ -1,0 +1,9 @@
+{
+  "name": "agendamento-publico",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Página pública de agendamento — solicita horários que ficam pendentes de aprovação no PsiApp",
+  "engines": {
+    "node": ">=18"
+  }
+}
