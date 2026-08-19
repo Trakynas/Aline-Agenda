@@ -67,14 +67,15 @@ async function getConfiguracaoExpediente() {
   return res.json();
 }
 
-// Lê a duração/intervalo padrão das consultas, também configurados no PsiApp
+// Lê a duração/intervalo padrão das consultas e a lista de calendários do
+// Google que devem ser checados, também configurados no PsiApp
 async function getConfiguracaoGeral() {
   const userId = process.env.PSIAPP_USER_ID;
-  const url = `${SUPABASE_URL}/rest/v1/configuracao_geral?user_id=eq.${userId}&select=duracao_consulta_min,intervalo_min&limit=1`;
+  const url = `${SUPABASE_URL}/rest/v1/configuracao_geral?user_id=eq.${userId}&select=duracao_consulta_min,intervalo_min,calendarios_google&limit=1`;
   const res = await fetch(url, { headers: headers() });
   if (!res.ok) throw new Error(`Falha ao consultar configuração geral (${res.status})`);
   const rows = await res.json();
-  return rows[0] || { duracao_consulta_min: 50, intervalo_min: 10 };
+  return rows[0] || { duracao_consulta_min: 50, intervalo_min: 10, calendarios_google: ["primary"] };
 }
 
 module.exports = { getAgendaOcupada, criarSolicitacao, getConfiguracaoExpediente, getConfiguracaoGeral };

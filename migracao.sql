@@ -39,10 +39,14 @@ create policy "usuária autenticada vê e edita sua própria configuração de e
 create table if not exists configuracao_geral (
   user_id uuid primary key default auth.uid(),
   duracao_consulta_min int not null default 50,
-  intervalo_min int not null default 10
+  intervalo_min int not null default 10,
+  calendarios_google text[] not null default array['primary']
 );
 
 alter table configuracao_geral enable row level security;
+
+alter table configuracao_geral
+  add column if not exists calendarios_google text[] not null default array['primary'];
 
 create policy "usuária autenticada vê e edita sua própria configuração geral"
   on configuracao_geral for all

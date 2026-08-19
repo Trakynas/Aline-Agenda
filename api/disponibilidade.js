@@ -18,7 +18,6 @@ const {
 } = require("./_lib/supabase");
 
 const TIMEZONE = "America/Sao_Paulo";
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "primary";
 
 function gerarSlotsDoDia(horaInicio, horaFim, duracaoMin, intervaloMin) {
   const slots = [];
@@ -38,7 +37,7 @@ function gerarSlotsDoDia(horaInicio, horaFim, duracaoMin, intervaloMin) {
   return slots;
 }
 
-async function buscarBusyDoGoogle(accessToken, data) {
+async function buscarBusyDoGoogle(accessToken, data, calendarIds) {
   const timeMin = `${data}T00:00:00-03:00`;
   const timeMax = `${data}T23:59:59-03:00`;
 
@@ -52,7 +51,7 @@ async function buscarBusyDoGoogle(accessToken, data) {
       timeMin,
       timeMax,
       timeZone: TIMEZONE,
-      items: [{ id: CALENDAR_ID }],
+      items: calendarIds.map((id) => ({ id })),
     }),
   });
 
@@ -61,7 +60,14 @@ async function buscarBusyDoGoogle(accessToken, data) {
   }
 
   const dataRes = await res.json();
-  const busy = dataRes.calendars?.[CALENDAR_ID]?.busy || [];
+  const calendars = dataRes.calendars || {};
+
+  // Junta os intervalos ocupados de TODOS os calendários selecionados
+  const busy = [];
+  for (const id of calendarIds) {
+    const doCalendario = calendars[id]?.busy || [];
+    for (const b of doCalendario) busy.push(b);
+  }
 
   // Devolve os intervalos como instantes absolutos (Date) — comparar assim
   // evita qualquer confusão de fuso horário entre o servidor (UTC na Vercel)
@@ -84,7 +90,7 @@ function seSobrepoe(a, b) {
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
-  const { data } = req.query;
+  const { data, debug } = req.query;
   if (!data) {
     return res.status(400).json({ erro: "Parâmetro 'data' (YYYY-MM-DD) é obrigatório" });
   }
@@ -112,7 +118,8 @@ module.exports = async (req, res) => {
       configGeral.intervalo_min
     );
 
-    const busyGoogle = await buscarBusyDoGoogle(accessToken, data);
+    const calendarIds = configGeral.calendarios_google?.length ? configGeral.calendarios_google : ["primary"];
+    const busyGoogle = await buscarBusyDoGoogle(accessToken, data, calendarIds);
     const horariosInternosOcupados = new Set(
       ocupadosInternos.filter((a) => a.data === data).map((a) => a.horario?.slice(0, 5))
     );
@@ -125,19 +132,36 @@ module.exports = async (req, res) => {
       return !busyGoogle.some((b) => seSobrepoe(intervaloSlot, b));
     });
 
-    return res.status(200).json({
+    const resposta = {
       slots: livres,
       fallback: false,
       duracaoMin: configGeral.duracao_consulta_min,
-    });
+    };
+
+    // Modo de depuração: ?debug=1 na URL mostra o que o Google devolveu de fato
+    if (debug === "1") {
+      resposta.debug = {
+        calendarIdsUsados: calendarIds,
+        totalSlotsAntesDoFiltro: todosSlots.length,
+        busyGoogleBruto: busyGoogle.map((b) => ({
+          inicio: b.inicio.toISOString(),
+          fim: b.fim.toISOString(),
+        })),
+        horariosInternosOcupados: [...horariosInternosOcupados],
+      };
+    }
+
+    return res.status(200).json(resposta);
   } catch (err) {
     console.error("Erro ao calcular disponibilidade:", err.message);
-    return res.status(200).json({
+    const resposta = {
       slots: [],
       fallback: true,
       mensagem:
         "No momento não conseguimos consultar a agenda automaticamente. " +
         "Entre em contato diretamente para marcar seu horário.",
-    });
+    };
+    if (debug === "1") resposta.debug = { erro: err.message };
+    return res.status(200).json(resposta);
   }
 };
