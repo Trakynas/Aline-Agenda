@@ -63,11 +63,18 @@ async function buscarBusyDoGoogle(accessToken, data) {
   const dataRes = await res.json();
   const busy = dataRes.calendars?.[CALENDAR_ID]?.busy || [];
 
-  // Converte pra lista de horários "ocupados" no formato HH:MM (início)
+  // Converte pra lista de horários "ocupados" no formato HH:MM (início) respeitando o fuso de Brasília
   return busy.map((b) => {
     const inicio = new Date(b.start);
-    const h = String(inicio.getHours()).padStart(2, "0");
-    const m = String(inicio.getMinutes()).padStart(2, "0");
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(inicio);
+
+    const h = parts.find((p) => p.type === "hour").value;
+    const m = parts.find((p) => p.type === "minute").value;
     return `${h}:${m}`;
   });
 }
