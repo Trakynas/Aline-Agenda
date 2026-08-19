@@ -1,27 +1,18 @@
 // GET /api/disponibilidade?data=YYYY-MM-DD
-//
-// Devolve os horários livres de um dia específico, cruzando:
-//   1. O Google Calendar dela (via freebusy.query)
-//   2. A tabela `agenda` do Supabase (compromissos pendentes/confirmados)
-//
-// Se a renovação do token do Google falhar (ex: passou dos 7 dias sem
-// reconectar), devolve fallback=true em vez de quebrar, pra página pública
-// mostrar uma mensagem amigável em vez de erro.
-
 const { getGoogleAccessToken } = require("./_lib/google-auth");
 const { getAgendaOcupada } = require("./_lib/supabase");
 
-// Horário comercial fixo — ajuste conforme a rotina real
 const EXPEDIENTE = {
-  inicio: 8, // 08:00
-  fim: 18, // 18:00
+  inicio: 8,
+  fim: 18,
   duracaoConsultaMin: 50,
-  intervaloMin: 10, // intervalo entre consultas
-  diasBloqueados: [0, 6], // 0 = domingo, 6 = sábado
+  intervaloMin: 10,
+  diasBloqueados: [0, 6],
 };
 
 const TIMEZONE = "America/Sao_Paulo";
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "primary";
+// Aceita múltiplos IDs separados por vírgula (ex: "primary,outro-email@gmail.com")
+const CALENDAR_IDS = (process.env.GOOGLE_CALENDAR_ID || "primary").split(',').map(id => id.trim());
 
 function gerarSlotsDoDia() {
   const slots = [];
@@ -42,6 +33,8 @@ async function buscarBusyDoGoogle(accessToken, data) {
   const timeMin = `${data}T00:00:00-03:00`;
   const timeMax = `${data}T23:59:59-03:00`;
 
+  const items = CALENDAR_IDS.map(id => ({ id }));
+
   const res = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
     method: "POST",
     headers: {
@@ -52,7 +45,7 @@ async function buscarBusyDoGoogle(accessToken, data) {
       timeMin,
       timeMax,
       timeZone: TIMEZONE,
-      items: [{ id: CALENDAR_ID }],
+      items: items,
     }),
   });
 
@@ -61,10 +54,15 @@ async function buscarBusyDoGoogle(accessToken, data) {
   }
 
   const dataRes = await res.json();
-  const busy = dataRes.calendars?.[CALENDAR_ID]?.busy || [];
+  
+  let todosBusy = [];
+  CALENDAR_IDS.forEach(id => {
+    if (dataRes.calendars?.[id]?.busy) {
+      todosBusy = [...todosBusy, ...dataRes.calendars[id].busy];
+    }
+  });
 
-  // Converte pra lista de horários "ocupados" no formato HH:MM (início) respeitando o fuso de Brasília
-  return busy.map((b) => {
+  return todosBusy.map((b) => {
     const inicio = new Date(b.start);
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: TIMEZONE,
@@ -111,7 +109,6 @@ module.exports = async (req, res) => {
     return res.status(200).json({ slots: livres, fallback: false });
   } catch (err) {
     console.error("Erro ao calcular disponibilidade:", err.message);
-    // Fallback: não quebra a página, só avisa que não dá pra checar agora
     return res.status(200).json({
       slots: [],
       fallback: true,
