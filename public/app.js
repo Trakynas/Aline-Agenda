@@ -1,6 +1,7 @@
 const state = {
   data: null,
   horario: null, // sempre no horário de Brasília — é o que vai pra API
+  duracao: 50,
 };
 
 // O Brasil não tem mais horário de verão desde 2019, então -03:00 é fixo
@@ -74,6 +75,7 @@ async function carregarSlots(data) {
   try {
     const res = await fetch(`/api/disponibilidade?data=${data}`);
     const json = await res.json();
+    state.duracao = json.duracaoMin || 50;
 
     if (json.fallback) {
       el.slotsStatus.classList.add("erro");
@@ -171,6 +173,7 @@ el.btnEnviar.addEventListener("click", async () => {
         email: email || undefined,
         data: state.data,
         horario: state.horario,
+        duracao: state.duracao,
         observacoes: observacoes || undefined,
       }),
     });

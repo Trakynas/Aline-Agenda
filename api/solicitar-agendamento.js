@@ -14,7 +14,7 @@ module.exports = async (req, res) => {
     return res.status(405).json({ erro: "Método não permitido" });
   }
 
-  const { nome, telefone, email, data, horario, observacoes } = req.body || {};
+  const { nome, telefone, email, data, horario, observacoes, duracao } = req.body || {};
 
   if (!nome || !telefone || !data || !horario) {
     return res.status(400).json({ erro: "Campos obrigatórios: nome, telefone, data, horario" });
@@ -40,6 +40,7 @@ module.exports = async (req, res) => {
       paciente_email: email || null,
       data,
       horario,
+      duracao: duracao || 50,
       observacoes: observacoes || null,
     });
 

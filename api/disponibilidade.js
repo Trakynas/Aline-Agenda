@@ -1,26 +1,35 @@
 // GET /api/disponibilidade?data=YYYY-MM-DD
-const { getGoogleAccessToken } = require("./_lib/google-auth");
-const { getAgendaOcupada } = require("./_lib/supabase");
+//
+// Devolve os horários livres de um dia específico, cruzando:
+//   1. O expediente configurado pela Aline no PsiApp (tela Configurações)
+//   2. O Google Calendar dela (via freebusy.query) — bloqueia qualquer
+//      evento, seja consulta ou compromisso pessoal
+//   3. A tabela `agenda` do Supabase (compromissos pendentes/confirmados)
+//
+// Se algo falhar (token do Google expirado, config indisponível, etc),
+// devolve fallback=true em vez de quebrar, pra página pública mostrar uma
+// mensagem amigável em vez de erro.
 
-const EXPEDIENTE = {
-  inicio: 8,
-  fim: 18,
-  duracaoConsultaMin: 50,
-  intervaloMin: 10,
-  diasBloqueados: [0, 6],
-};
+const { getGoogleAccessToken } = require("./_lib/google-auth");
+const {
+  getAgendaOcupada,
+  getConfiguracaoExpediente,
+  getConfiguracaoGeral,
+} = require("./_lib/supabase");
 
 const TIMEZONE = "America/Sao_Paulo";
-// Aceita múltiplos IDs separados por vírgula (ex: "primary,outro-email@gmail.com")
-const CALENDAR_IDS = (process.env.GOOGLE_CALENDAR_ID || "primary").split(',').map(id => id.trim());
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "primary";
 
-function gerarSlotsDoDia() {
+function gerarSlotsDoDia(horaInicio, horaFim, duracaoMin, intervaloMin) {
   const slots = [];
-  const passo = EXPEDIENTE.duracaoConsultaMin + EXPEDIENTE.intervaloMin;
-  let minutos = EXPEDIENTE.inicio * 60;
-  const fimMinutos = EXPEDIENTE.fim * 60;
+  const [hi, mi] = horaInicio.slice(0, 5).split(":").map(Number);
+  const [hf, mf] = horaFim.slice(0, 5).split(":").map(Number);
 
-  while (minutos + EXPEDIENTE.duracaoConsultaMin <= fimMinutos) {
+  const passo = duracaoMin + intervaloMin;
+  let minutos = hi * 60 + mi;
+  const fimMinutos = hf * 60 + mf;
+
+  while (minutos + duracaoMin <= fimMinutos) {
     const h = String(Math.floor(minutos / 60)).padStart(2, "0");
     const m = String(minutos % 60).padStart(2, "0");
     slots.push(`${h}:${m}`);
@@ -33,8 +42,6 @@ async function buscarBusyDoGoogle(accessToken, data) {
   const timeMin = `${data}T00:00:00-03:00`;
   const timeMax = `${data}T23:59:59-03:00`;
 
-  const items = CALENDAR_IDS.map(id => ({ id }));
-
   const res = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
     method: "POST",
     headers: {
@@ -45,7 +52,7 @@ async function buscarBusyDoGoogle(accessToken, data) {
       timeMin,
       timeMax,
       timeZone: TIMEZONE,
-      items: items,
+      items: [{ id: CALENDAR_ID }],
     }),
   });
 
@@ -54,25 +61,12 @@ async function buscarBusyDoGoogle(accessToken, data) {
   }
 
   const dataRes = await res.json();
-  
-  let todosBusy = [];
-  CALENDAR_IDS.forEach(id => {
-    if (dataRes.calendars?.[id]?.busy) {
-      todosBusy = [...todosBusy, ...dataRes.calendars[id].busy];
-    }
-  });
+  const busy = dataRes.calendars?.[CALENDAR_ID]?.busy || [];
 
-  return todosBusy.map((b) => {
+  return busy.map((b) => {
     const inicio = new Date(b.start);
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: TIMEZONE,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(inicio);
-
-    const h = parts.find((p) => p.type === "hour").value;
-    const m = parts.find((p) => p.type === "minute").value;
+    const h = String(inicio.getHours()).padStart(2, "0");
+    const m = String(inicio.getMinutes()).padStart(2, "0");
     return `${h}:${m}`;
   });
 }
@@ -86,17 +80,27 @@ module.exports = async (req, res) => {
   }
 
   const diaSemana = new Date(`${data}T12:00:00`).getDay();
-  if (EXPEDIENTE.diasBloqueados.includes(diaSemana)) {
-    return res.status(200).json({ slots: [], motivo: "fora_do_expediente" });
-  }
-
-  const todosSlots = gerarSlotsDoDia();
 
   try {
-    const [accessToken, ocupadosInternos] = await Promise.all([
+    const [accessToken, ocupadosInternos, configExpediente, configGeral] = await Promise.all([
       getGoogleAccessToken(),
       getAgendaOcupada(data, data),
+      getConfiguracaoExpediente(),
+      getConfiguracaoGeral(),
     ]);
+
+    const diaConfig = configExpediente.find((c) => c.dia_semana === diaSemana);
+
+    if (!diaConfig || !diaConfig.ativo) {
+      return res.status(200).json({ slots: [], motivo: "fora_do_expediente" });
+    }
+
+    const todosSlots = gerarSlotsDoDia(
+      diaConfig.hora_inicio,
+      diaConfig.hora_fim,
+      configGeral.duracao_consulta_min,
+      configGeral.intervalo_min
+    );
 
     const busyGoogle = await buscarBusyDoGoogle(accessToken, data);
     const busyInterno = ocupadosInternos
@@ -106,7 +110,11 @@ module.exports = async (req, res) => {
     const ocupados = new Set([...busyGoogle, ...busyInterno]);
     const livres = todosSlots.filter((s) => !ocupados.has(s));
 
-    return res.status(200).json({ slots: livres, fallback: false });
+    return res.status(200).json({
+      slots: livres,
+      fallback: false,
+      duracaoMin: configGeral.duracao_consulta_min,
+    });
   } catch (err) {
     console.error("Erro ao calcular disponibilidade:", err.message);
     return res.status(200).json({

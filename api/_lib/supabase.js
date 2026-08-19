@@ -54,4 +54,23 @@ async function criarSolicitacao(payload) {
   return rows[0];
 }
 
-module.exports = { getAgendaOcupada, criarSolicitacao };
+// Lê os dias/horários de expediente configurados pela Aline no PsiApp
+async function getConfiguracaoExpediente() {
+  const userId = process.env.PSIAPP_USER_ID;
+  const url = `${SUPABASE_URL}/rest/v1/configuracao_expediente?user_id=eq.${userId}&select=dia_semana,ativo,hora_inicio,hora_fim`;
+  const res = await fetch(url, { headers: headers() });
+  if (!res.ok) throw new Error(`Falha ao consultar configuração de expediente (${res.status})`);
+  return res.json();
+}
+
+// Lê a duração/intervalo padrão das consultas, também configurados no PsiApp
+async function getConfiguracaoGeral() {
+  const userId = process.env.PSIAPP_USER_ID;
+  const url = `${SUPABASE_URL}/rest/v1/configuracao_geral?user_id=eq.${userId}&select=duracao_consulta_min,intervalo_min&limit=1`;
+  const res = await fetch(url, { headers: headers() });
+  if (!res.ok) throw new Error(`Falha ao consultar configuração geral (${res.status})`);
+  const rows = await res.json();
+  return rows[0] || { duracao_consulta_min: 50, intervalo_min: 10 };
+}
+
+module.exports = { getAgendaOcupada, criarSolicitacao, getConfiguracaoExpediente, getConfiguracaoGeral };
