@@ -40,6 +40,10 @@ async function criarSolicitacao(payload) {
     headers: headers({ Prefer: "return=representation" }),
     body: JSON.stringify({
       ...payload,
+      user_id: process.env.PSIAPP_USER_ID, // a tabela agenda exige esse campo (RLS/NOT NULL)
+      tipo: "paciente", // idem — mesmo valor que a aprovação no PsiApp já define
+      descricao: payload.paciente_nome,
+      whatsapp: payload.paciente_telefone,
       status: "pendente",
       origem: "publico",
     }),

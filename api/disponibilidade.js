@@ -63,12 +63,22 @@ async function buscarBusyDoGoogle(accessToken, data) {
   const dataRes = await res.json();
   const busy = dataRes.calendars?.[CALENDAR_ID]?.busy || [];
 
-  return busy.map((b) => {
-    const inicio = new Date(b.start);
-    const h = String(inicio.getHours()).padStart(2, "0");
-    const m = String(inicio.getMinutes()).padStart(2, "0");
-    return `${h}:${m}`;
-  });
+  // Devolve os intervalos como instantes absolutos (Date) — comparar assim
+  // evita qualquer confusão de fuso horário entre o servidor (UTC na Vercel)
+  // e o horário de Brasília usado na agenda.
+  return busy.map((b) => ({ inicio: new Date(b.start), fim: new Date(b.end) }));
+}
+
+// Um slot (HH:MM, no fuso de Brasília) vira um intervalo absoluto de tempo,
+// pra poder comparar com os busy do Google sem depender do fuso do servidor.
+function slotParaIntervalo(data, horarioHHMM, duracaoMin) {
+  const inicio = new Date(`${data}T${horarioHHMM}:00-03:00`);
+  const fim = new Date(inicio.getTime() + duracaoMin * 60000);
+  return { inicio, fim };
+}
+
+function seSobrepoe(a, b) {
+  return a.inicio < b.fim && a.fim > b.inicio;
 }
 
 module.exports = async (req, res) => {
@@ -103,12 +113,17 @@ module.exports = async (req, res) => {
     );
 
     const busyGoogle = await buscarBusyDoGoogle(accessToken, data);
-    const busyInterno = ocupadosInternos
-      .filter((a) => a.data === data)
-      .map((a) => a.horario?.slice(0, 5));
+    const horariosInternosOcupados = new Set(
+      ocupadosInternos.filter((a) => a.data === data).map((a) => a.horario?.slice(0, 5))
+    );
 
-    const ocupados = new Set([...busyGoogle, ...busyInterno]);
-    const livres = todosSlots.filter((s) => !ocupados.has(s));
+    const duracao = configGeral.duracao_consulta_min;
+    const livres = todosSlots.filter((horario) => {
+      if (horariosInternosOcupados.has(horario)) return false;
+
+      const intervaloSlot = slotParaIntervalo(data, horario, duracao);
+      return !busyGoogle.some((b) => seSobrepoe(intervaloSlot, b));
+    });
 
     return res.status(200).json({
       slots: livres,
