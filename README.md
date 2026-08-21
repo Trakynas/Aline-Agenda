@@ -45,6 +45,26 @@ reconectar, por causa do modo "Testing" do OAuth), `/api/disponibilidade`
 não quebra: devolve `fallback: true` e a página mostra uma mensagem pedindo
 para entrar em contato diretamente, em vez de travar.
 
+## 4. Notificação por e-mail (opcional, mas recomendado)
+
+Quando alguém envia uma solicitação, a Aline pode receber um e-mail automático.
+
+1. Crie uma conta gratuita em [resend.com](https://resend.com) **usando o e-mail dela**
+   (`aline.schutz.psi@gmail.com` ou o que preferir usar pra receber as notificações)
+2. Em **API Keys**, crie uma chave nova e copie
+3. No Vercel, adicione as env vars:
+   - `RESEND_API_KEY` — a chave copiada
+   - `EMAIL_NOTIFICACAO` — o mesmo e-mail usado pra criar a conta no Resend
+   - `PSIAPP_URL` — opcional, padrão já é `https://psiapp-omega.vercel.app`
+
+⚠️ Sem verificar um domínio próprio no Resend (passo extra, não obrigatório),
+só é possível mandar e-mail pro mesmo endereço usado pra criar a conta —
+por isso o e-mail de notificação **precisa ser o mesmo** da conta Resend.
+Como é ela mesma quem recebe, isso não é um problema.
+
+Se essas variáveis não forem configuradas, o agendamento continua funcionando
+normalmente — só não manda o e-mail (falha silenciosa, não trava nada).
+
 ## Estrutura
 
 ```

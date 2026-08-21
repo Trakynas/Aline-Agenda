@@ -6,6 +6,7 @@
 // dentro do PsiApp (reaproveitando a lógica que já existe lá).
 
 const { criarSolicitacao, getAgendaOcupada } = require("./_lib/supabase");
+const { notificarNovaSolicitacao } = require("./_lib/email");
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -43,6 +44,13 @@ module.exports = async (req, res) => {
       duracao: duracao || 50,
       observacoes: observacoes || null,
     });
+
+    // Não usa "await" de propósito — não faz sentido o paciente esperar o
+    // e-mail ser enviado pra ver a tela de sucesso, e se o e-mail falhar
+    // (fora do ar, chave errada etc.) isso nunca deve derrubar o agendamento.
+    notificarNovaSolicitacao(solicitacao).catch((err) =>
+      console.error("Notificação por e-mail falhou:", err.message)
+    );
 
     return res.status(201).json({ ok: true, solicitacao });
   } catch (err) {
