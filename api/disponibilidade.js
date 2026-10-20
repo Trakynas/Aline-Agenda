@@ -87,6 +87,28 @@ function seSobrepoe(a, b) {
   return a.inicio < b.fim && a.fim > b.inicio;
 }
 
+// Tenta de novo quando o erro é passageiro (ex: função acordando do "cold start",
+// conexão que cai, instabilidade rápida do Google). Erros permanentes, como o
+// token do Google vencido, não adiantam repetir e falham de imediato.
+function erroPermanente(err) {
+  const msg = String(err && err.message);
+  return msg.includes("invalid_grant") || msg.includes("Nenhum refresh_token");
+}
+
+async function comRetentativa(fn, tentativas = 3, esperaMs = 600) {
+  let ultimoErro;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      ultimoErro = err;
+      if (erroPermanente(err) || i === tentativas - 1) break;
+      await new Promise((r) => setTimeout(r, esperaMs));
+    }
+  }
+  throw ultimoErro;
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
@@ -98,12 +120,14 @@ module.exports = async (req, res) => {
   const diaSemana = new Date(`${data}T12:00:00`).getDay();
 
   try {
-    const [accessToken, ocupadosInternos, configExpediente, configGeral] = await Promise.all([
-      getGoogleAccessToken(),
-      getAgendaOcupada(data, data),
-      getConfiguracaoExpediente(),
-      getConfiguracaoGeral(),
-    ]);
+    const [accessToken, ocupadosInternos, configExpediente, configGeral] = await comRetentativa(() =>
+      Promise.all([
+        getGoogleAccessToken(),
+        getAgendaOcupada(data, data),
+        getConfiguracaoExpediente(),
+        getConfiguracaoGeral(),
+      ])
+    );
 
     const diaConfig = configExpediente.find((c) => c.dia_semana === diaSemana);
 
@@ -119,7 +143,7 @@ module.exports = async (req, res) => {
     );
 
     const calendarIds = configGeral.calendarios_google?.length ? configGeral.calendarios_google : ["primary"];
-    const busyGoogle = await buscarBusyDoGoogle(accessToken, data, calendarIds);
+    const busyGoogle = await comRetentativa(() => buscarBusyDoGoogle(accessToken, data, calendarIds));
     const horariosInternosOcupados = new Set(
       ocupadosInternos.filter((a) => a.data === data).map((a) => a.horario?.slice(0, 5))
     );
@@ -157,6 +181,7 @@ module.exports = async (req, res) => {
     const resposta = {
       slots: [],
       fallback: true,
+      permanente: erroPermanente(err),
       mensagem:
         "No momento não conseguimos consultar a agenda automaticamente. " +
         "Entre em contato diretamente para marcar seu horário.",

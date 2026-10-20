@@ -57,7 +57,7 @@ const el = {
 };
 
 // Data mínima = hoje
-const hoje = new Date().toISOString().split("T")[0];
+const hoje = new Date().toLocaleDateString("en-CA", { timeZone: FUSO_CLINICA }); // YYYY-MM-DD em Brasília
 el.inputData.min = hoje;
 el.inputData.value = hoje;
 
@@ -72,14 +72,16 @@ async function carregarSlots(data) {
   el.slotsStatus.classList.remove("erro");
   el.slotsStatus.textContent = "Buscando horários disponíveis...";
 
+  const minhaRequisicao = ++requisicaoAtual;
+
   try {
-    const res = await fetch(`/api/disponibilidade?data=${data}`);
-    const json = await res.json();
+    const json = await buscarDisponibilidade(data);
+    // Se o usuário trocou de data enquanto esperava, ignora essa resposta velha
+    if (minhaRequisicao !== requisicaoAtual) return;
     state.duracao = json.duracaoMin || 50;
 
     if (json.fallback) {
-      el.slotsStatus.classList.add("erro");
-      el.slotsStatus.textContent = json.mensagem;
+      mostrarErroComBotao(json.mensagem, data);
       return;
     }
 
@@ -116,9 +118,44 @@ async function carregarSlots(data) {
       el.slotsGrid.appendChild(btn);
     });
   } catch (err) {
-    el.slotsStatus.classList.add("erro");
-    el.slotsStatus.textContent = "Não foi possível carregar os horários. Tente novamente.";
+    if (minhaRequisicao !== requisicaoAtual) return;
+    mostrarErroComBotao("Não foi possível carregar os horários.", data);
   }
+}
+
+let requisicaoAtual = 0;
+
+// Consulta a API e tenta de novo (até 3 vezes) quando dá um tropeço passageiro,
+// que é comum no primeiro acesso, quando o servidor ainda está "acordando".
+async function buscarDisponibilidade(data) {
+  const esperas = [0, 1000, 2000];
+  let ultimoJson = null;
+
+  for (let i = 0; i < esperas.length; i++) {
+    if (esperas[i]) await new Promise((r) => setTimeout(r, esperas[i]));
+    try {
+      const res = await fetch(`/api/disponibilidade?data=${data}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      // Erro permanente (ex: conexão com o Google vencida) não adianta repetir
+      if (!json.fallback || json.permanente) return json;
+      ultimoJson = json;
+    } catch (err) {
+      if (i === esperas.length - 1 && !ultimoJson) throw err;
+    }
+  }
+  return ultimoJson;
+}
+
+function mostrarErroComBotao(mensagem, data) {
+  el.slotsStatus.classList.add("erro");
+  el.slotsStatus.textContent = mensagem + " ";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-retry";
+  btn.textContent = "Tentar novamente";
+  btn.addEventListener("click", () => carregarSlots(data));
+  el.slotsStatus.appendChild(btn);
 }
 
 function selecionarSlot(slot, btnEl) {
